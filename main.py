@@ -2,7 +2,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.openapi.utils import get_openapi
 from typing import Optional, List
-from sqlmodel import SQLModel, Field, Session, create_engine, select
+from sqlmodel import SQLModel, Field
 
 
 app = FastAPI(
@@ -13,27 +13,14 @@ app = FastAPI(
 	redoc_url="/redoc",
 	openapi_url="/openapi.json",
 )
+# ToDo 已提取为子应用 `todo_app`（见 todo_app/）
 
-
-class Todo(SQLModel, table=True):
-	id: Optional[int] = Field(default=None, primary_key=True)
-	title: str
-	description: Optional[str] = None
-	done: bool = False
-
-
-class TodoCreate(SQLModel):
-	title: str
-	description: Optional[str] = None
-
-
-# SQLite engine (file-based). For tests/dev use, file is `database.db` in workspace.
-DATABASE_URL = "sqlite:///database.db"
-engine = create_engine(DATABASE_URL, echo=False)
+from db import engine
 
 
 @app.on_event("startup")
 def on_startup():
+	# 在启动时创建所有表（包括子应用定义的模型）
 	SQLModel.metadata.create_all(engine)
 
 
@@ -56,66 +43,12 @@ def custom_openapi():
 app.openapi = custom_openapi
 
 
-@app.post("/todos", response_model=Todo)
-def create_todo(payload: TodoCreate):
-	todo = Todo(title=payload.title, description=payload.description)
-	with Session(engine) as session:
-		session.add(todo)
-		session.commit()
-		session.refresh(todo)
-		return todo
+# Include routers from sub-applications so their operations appear in the main OpenAPI
+from warehouse_app import router as warehouse_router
+app.include_router(warehouse_router, prefix="/warehouse")
 
-
-@app.get("/todos", response_model=List[Todo])
-def list_todos():
-	with Session(engine) as session:
-		todos = session.exec(select(Todo)).all()
-		return todos
-
-
-@app.get("/todos/{todo_id}", response_model=Todo)
-def get_todo(todo_id: int):
-	with Session(engine) as session:
-		todo = session.get(Todo, todo_id)
-		if not todo:
-			raise HTTPException(status_code=404, detail="Todo not found")
-		return todo
-
-
-@app.put("/todos/{todo_id}", response_model=Todo)
-def update_todo(todo_id: int, payload: TodoCreate):
-	with Session(engine) as session:
-		todo = session.get(Todo, todo_id)
-		if not todo:
-			raise HTTPException(status_code=404, detail="Todo not found")
-		todo.title = payload.title
-		todo.description = payload.description
-		session.add(todo)
-		session.commit()
-		session.refresh(todo)
-		return todo
-
-
-@app.patch("/todos/{todo_id}/toggle", response_model=Todo)
-def toggle_todo(todo_id: int):
-	with Session(engine) as session:
-		todo = session.get(Todo, todo_id)
-		if not todo:
-			raise HTTPException(status_code=404, detail="Todo not found")
-		todo.done = not todo.done
-		session.add(todo)
-		session.commit()
-		session.refresh(todo)
-		return todo
-
-
-@app.delete("/todos/{todo_id}", status_code=204)
-def delete_todo(todo_id: int):
-	with Session(engine) as session:
-		todo = session.get(Todo, todo_id)
-		if not todo:
-			raise HTTPException(status_code=404, detail="Todo not found")
-		session.delete(todo)
-		session.commit()
-		return
+# Include todo router
+from todo_app import router as todo_router
+app.include_router(todo_router, prefix="/todos")
+    
 
