@@ -15,9 +15,6 @@ app = FastAPI(
 )
 # ToDo 已提取为子应用 `todo_app`（见 todo_app/）
 
-from db import engine
-
-
 @app.on_event("startup")
 def on_startup():
 	# 在启动时创建所有表（包括子应用定义的模型）
