@@ -1,8 +1,8 @@
 from typing import Optional, List
 from sqlmodel import SQLModel, Field, Session, create_engine, select
-from to_do.todo import Todo, TodoCreate
 from fastapi import FastAPI, HTTPException
 from database import engine
+from todo.todo import Todo, TodoCreate
 
 
 def create_todo(payload: TodoCreate):
@@ -17,6 +17,7 @@ def create_todo(payload: TodoCreate):
 def list_todos():
 	with Session(engine) as session:
 		todos = session.exec(select(Todo)).all()
+		print(f"获取到的待办事项: {todos}")
 		return todos
 
 
